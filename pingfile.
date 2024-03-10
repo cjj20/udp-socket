@@ -1,0 +1,310 @@
+#include <string.h>
+#include <sys/ioctl.h>
+#include <net/ethernet.h>
+//#include<linux/if.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
+#include <arpa/inet.h>
+#include <netinet/in_systm.h>
+#include <netinet/ip_icmp.h>
+#include <netinet/ip.h>
+#include <sys/select.h>
+#include <sys/stat.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <errno.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/time.h>
+
+#include <unistd.h>
+#include <signal.h>
+
+#define PORT 1010
+
+
+
+#define SIZE 60
+
+
+int32_t checksum(uint16_t *buf, int32_t len);
+
+
+
+struct addrinfo add, *adi, **addi;
+
+int show();
+int main(int argc, char **argv ){
+    
+    socklen_t len;
+    
+    struct ip iph;
+    struct icmp icp;
+    int sockfd;
+    fd_set fd;
+    
+    struct sockaddr my_addre, *addre;
+    struct sockaddr_in addr;
+    int s;
+    
+    
+    char buffer[SIZE];
+    unsigned short buff;
+    struct timeval time;
+   
+    
+    
+    
+    
+    
+   
+    //usage  stuff here
+   if(argc!=0)
+    {
+        
+        fprintf(stderr," usage:%s\n", argv[0]);
+        
+        
+    }
+   
+   char start_port[]="4.2.2.2";
+   
+    
+    int get;
+    //moving onto getaddrinfo so the ip address and other info can be filled
+    //initialize struct
+    memset(&add,0,sizeof(struct addrinfo));
+    add.ai_family=AF_INET;
+    add.ai_socktype=SOCK_RAW;
+    add.ai_protocol=IPPROTO_ICMP;
+    
+    
+    //int getaddrinfo(start_port, finish_port, &add, &adi);
+    if((get=getaddrinfo(start_port, NULL, (struct addrinfo*)&add, (struct addrinfo**)&adi))!=0){
+        printf( "getaddrinfo stuff %s\n", gai_strerror(get));
+        return 2;
+    }
+    if((get=getaddrinfo(start_port, NULL, (struct addrinfo*)&add, (struct addrinfo**)&adi))==0){
+        printf( "getaddrinfo equal to zero %s\n", gai_strerror(get));
+        perror("getaddrinfo function: ");
+        
+    }
+    printf("IP address stored here for %s:\n\n", start_port);
+    //storing ip address
+    struct sockaddr saddr;
+    struct sockaddr_in *s_in=(struct sockaddr_in *)&saddr;
+    
+    //converting ip address into inet address
+    //inet_aton("127.0.0.1", &(s_in->sin_addr));
+    if(inet_pton(AF_INET, start_port, &(s_in->sin_addr))!=1){
+      perror("error with ip address\n");
+    }
+    if(inet_pton(AF_INET, start_port, &(s_in->sin_addr))==1){
+      printf("no error with ip address\n");
+    }
+     //returns linked list containing addresses found
+    if(( s=socket(adi->ai_family, adi->ai_socktype, adi->ai_protocol))<0){
+      perror("socket has failed\n");
+      return 1;
+      
+    }
+if(( s=socket(adi->ai_family, adi->ai_socktype, adi->ai_protocol))>0){
+      perror("socket has succeeded\n");
+      
+}
+
+   
+    
+if(s<0){
+perror("socket failed\n");
+}
+
+    
+
+    
+    //setsockopt supposed to go here only if building ip header info
+    //const int one = 1;
+    //setsockopt (s, IPPROTO_IP, IP_HDRINCL, &one, sizeof (one));   
+   
+    
+
+    struct icmp icm;
+
+    
+    int se=1;
+    icm.icmp_type=8;
+    icm.icmp_code=0;
+    icm.icmp_id=getpid()&0xFFFF;
+    icm.icmp_cksum=0;
+    icm.icmp_seq=se++;
+
+
+
+    icm.icmp_cksum = checksum((uint16_t *)&icm, sizeof(icm));
+    
+    
+
+     
+    memset(&addr, 0,sizeof(struct sockaddr_in));
+    
+    addr.sin_family=AF_INET;
+    addr.sin_port=htons(1010);
+    addr.sin_addr.s_addr=inet_addr(start_port);
+    
+    
+     //sendto function uses icmp header info
+      int bytes_stuff=sendto(s,&icm, sizeof(icm), 0, (struct sockaddr*)&addr, sizeof(addr));
+      
+    if(bytes_stuff < 0)
+    {
+        perror("sendto failed");
+        
+    }
+
+  
+    if(bytes_stuff>0){
+      
+        perror("sendto function worked");
+        
+       
+    } 
+    
+ 
+    
+
+   len=sizeof(struct sockaddr_storage);
+
+    
+    //waiting for echo reply, use of struct timeval time
+  
+    time.tv_sec=2;
+    time.tv_usec=0;
+    
+    //clear socket masks
+    FD_ZERO(&fd);
+    
+    //set up socket, use of select to read
+    socklen_t prec;
+    FD_SET(s,&fd);
+    
+    if(time.tv_usec<0){
+      printf("time less than");
+        time.tv_sec--;
+        time.tv_usec=time.tv_usec+1000000;
+    }
+    if(time.tv_sec>1000000){
+      printf("time greater");
+        time.tv_usec-=1000000;
+        time.tv_sec++;
+    }
+    
+    
+    
+
+    int sel;
+    sel=select(s+1,&fd,NULL, NULL, &time);
+    if(sel>0){
+    
+       socklen_t prec;
+    
+     //receive function, prec has the bytes
+      prec = recvfrom(s, buffer, sizeof(buffer), 0, &my_addre,&len);
+
+
+    if(prec > 0)
+    {
+        
+         printf("Packet received\n");
+         printf("Received %d bytes from %s\n", prec, start_port);
+       
+        struct icmp* icpp;
+       
+      
+        
+        // 20  because of ip header size
+        icpp=(struct icmp *)&buffer[20];
+        
+
+
+        struct ip *iphd;
+     
+       
+
+        if(icpp->icmp_type==ICMP_ECHO){
+         printf("it's an echo request\n");
+
+
+        }
+
+       if(icpp->icmp_type==ICMP_ECHOREPLY){
+       printf("it's an echo reply\n");
+
+       }
+        
+        printf(
+            "type: %x, code: %x, checksum: %x, identifier: %x, sequence: %x\n",
+            icpp->icmp_type,
+            icpp->icmp_code,
+            icpp->icmp_cksum,
+            icpp->icmp_id,
+            icpp->icmp_seq
+        );
+
+        exit(0);
+    }
+}//select end here
+    else
+    {
+        perror("its gone bad\n");
+        exit(0);
+    }
+
+
+    return 0;
+}
+//  () Checksum Method
+//
+int32_t checksum(uint16_t *buf, int32_t len)
+{
+    //
+    //  1. Variable needed for the calculation
+    //
+    int32_t nleft = len;    // Save how big is the header
+    int32_t sum = 0;        // Container for the calculated value
+    uint16_t *w = buf;      // Save the first 2 bytes of the header
+    uint16_t answer = 0;    // The state of our final answer
+
+    //
+    //  2. Sum every other byte from the header
+    //
+    while(nleft > 1)
+    {
+        sum += *w++;
+        nleft -= 2;
+    }
+
+    //
+    //  3. Handle odd headers
+    //
+    if(nleft == 1)
+    {
+        sum += *(uint8_t *)w;
+    }
+
+    //
+    //  4. Needed conversions
+    //
+    sum = (sum >> 16) + (sum & 0xFFFF);
+    sum += (sum >> 16);
+
+    //
+    //  5. Invert the bits
+    //
+    answer = ~sum;
+
+    //
+    //  -> Result
+    //
+    return answer;
+}
